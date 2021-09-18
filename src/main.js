@@ -18,6 +18,7 @@ const points = [];
 const curvePoints = [];
 const curvePoints2 = [];
 let curves = [];
+let curves2 = [];
 const matchPoints = [];
 const matchPoints2 = [];
 const tensionPoints = [];
@@ -123,6 +124,34 @@ function drawCurves(parent) {
     curves.push(curveObject);
     parent.add(curveObject);
   }
+  const curveMaterial2 = new THREE.LineBasicMaterial({
+    color: 0x000000,
+    linewidth: 1,
+  });
+  for (let i = 0; i < curvePoints2.length; i++) {
+    const [c1x, c1y, c1z, p1x, p1y, p1z, p2x, p2y, p2z, c2x, c2y, c2z] =
+      curvePoints2[i];
+
+    // const curve = new THREE.CubicBezierCurve3(
+    //   new THREE.Vector3(p1x, p1y, p1z),
+    //   new THREE.Vector3(c1x, c1y, c1z),
+    //   new THREE.Vector3(c2x, c2y, c2z),
+    //   new THREE.Vector3(p2x, p2y, p2z)
+    // );
+    // const points = curve.getPoints(50);
+
+    // const curveGeometry = new THREE.BufferGeometry().setFromPoints(points);
+    const points = [];
+    points.push(new THREE.Vector3(p1x, p1y, p1z));
+    points.push(new THREE.Vector3(p2x, p2y, p2z));
+
+    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+
+    const line = new THREE.Line(geometry, curveMaterial2);
+
+    curves2.push(line);
+    parent.add(line);
+  }
 }
 
 function relaxCurves() {
@@ -222,37 +251,37 @@ function generateTops() {
   let topY1 = random(100, 400);
   let topX2 = random(250, 450);
   let topY2 = random(100, 400);
-  return { topX1, topY1, topX2, topY2 };
+  return { topX1, topY1, topX2, topY2: topY1 };
 }
 
-function generateDays() {
+function generateDays(offset = { x: 0, y: 0, z: 0 }) {
   const days = [
     {
-      bottomX: random(0, 100),
+      bottomX: random(0, 100) + offset.x,
       type: "weekday",
     },
     {
-      bottomX: random(351, 450),
+      bottomX: random(351, 450) + offset.x,
       type: "weekday",
     },
     {
-      bottomX: random(101, 180),
+      bottomX: random(101, 180) + offset.x,
       type: "weekday",
     },
     {
-      bottomX: random(181, 200),
+      bottomX: random(181, 200) + offset.x,
       type: "weekday",
     },
     {
-      bottomX: random(201, 250),
+      bottomX: random(201, 250) + offset.x,
       type: "weekday",
     },
     {
-      bottomX: random(251, 350),
+      bottomX: random(251, 350) + offset.x,
       type: "weekend",
     },
     {
-      bottomX: random(451, 500),
+      bottomX: random(451, 500) + offset.x,
       type: "weekend",
     },
   ];
@@ -268,48 +297,63 @@ function setupTopVertLines() {
     const { bottomX, type } = days[i];
     const topX = type === "weekday" ? topX1 : topX2;
     const topY = type === "weekday" ? topY1 : topY2;
-    const l = [topX, topY, bottomX, bottomY];
-    const lm = (l[3] - l[1]) / (l[2] - l[0]);
+    const l = [topX, topY, 0, bottomX, bottomY, 0];
+    const lm = (l[4] - l[1]) / (l[3] - l[0]);
     const lb = l[1] - lm * l[0];
     lines.push({ l, plane: "xy" });
-    vertLines.push({ m: lm, b: lb, x: topX });
+    vertLines.push({ m: lm, b: lb, x: topX, z: 0, dy: topY - bottomY });
   }
   return vertLines;
 }
 
-function setupVertLines() {
-  const days = generateDays();
+function setupVertLines(offset) {
+  const days = generateDays(offset);
 
   const lastRow = points.slice(points.length - 7, points.length);
   const vertLines = [];
-  const bottomY = lastRow[0].y - 1000;
+  const bottomY = offset.y - random(200, 1000);
   for (let i = 0; i < days.length; i++) {
     const { bottomX } = days[i];
-    const topX = lastRow[i].x;
-    const topY = lastRow[i].y;
-    const z = lastRow[i].z;
-    const l = [topX, topY, bottomX, bottomY];
-    const lm = (l[3] - l[1]) / (l[2] - l[0]);
+    const topX = lastRow[i].x + offset.x;
+    const topY = offset.y;
+    const topZ = offset.z;
+    const l = [topX, topY, topZ, bottomX, bottomY, topZ];
+    const lm = (l[4] - l[1]) / (l[3] - l[0]);
     const lb = l[1] - lm * l[0];
     lines.push({ l, plane: "xy" });
-    vertLines.push({ m: lm, b: lb, x: topX, z });
+    vertLines.push({ m: lm, b: lb, x: topX, z: topZ, dy: topY - bottomY });
   }
   return vertLines;
 }
 
-function setupHoriLines(vertLines, rows) {
+function setupHoriLines(vertLines, rows, offset) {
   const horiLines = [];
 
   let currentY = -200;
+  let currentZ = 0;
+
+  let deltaY = vertLines[0].dy;
 
   if (points.length) {
     const lastRow = points.slice(points.length - 7, points.length);
-    currentY = lastRow[0].y;
+    currentY = offset.y;
+    currentZ = offset.z;
   }
 
   // horizontal lines
   for (let i = 0; i < rows; i++) {
-    const lHorY = currentY - i * 50;
+    let increment = 50;
+    if (i === rows - 1) {
+      increment = deltaY;
+    } else if (i === 0) {
+      increment = 0;
+    } else {
+      increment = random(50, 80);
+    }
+
+    const lHorY = currentY - increment;
+    currentY = lHorY;
+    deltaY -= increment;
     const l1 = vertLines[0];
     const l7 = vertLines[vertLines.length - 1];
     const l1Fin = isFinite(l1.m);
@@ -317,8 +361,10 @@ function setupHoriLines(vertLines, rows) {
     const lHor = [
       l1Fin ? (lHorY - l1.b) / l1.m : l1.x,
       lHorY,
+      currentZ,
       l7Fin ? (lHorY - l7.b) / l7.m : l7.x,
       lHorY,
+      currentZ,
     ];
     horiLines.push(lHorY);
     lines.push({ l: lHor, plane: "xy" });
@@ -329,80 +375,37 @@ function setupHoriLines(vertLines, rows) {
 function setupIntersectionPoints(vertLines, horiLines) {
   for (let j = 0; j < horiLines.length; j++) {
     for (let i = 0; i < vertLines.length; i++) {
-      const { m, b } = vertLines[i];
+      const { m, b, x, z } = vertLines[i];
       const y = horiLines[j];
-      const x = (y - b) / m;
-      points.push({ x, y, z: 0 });
+      const xf = isNaN((y - b) / m) ? x : (y - b) / m;
+      points.push({ x: xf, y, z });
     }
   }
 }
 
 function setupLines() {
-  // set 1
-
   let weeksLeft = weeks;
   const topVertLines = setupTopVertLines();
   const topRows = random(2, 10);
-  const topHoriLines = setupHoriLines(topVertLines, topRows);
+  const topHoriLines = setupHoriLines(topVertLines, topRows, {
+    x: 0,
+    y: 0,
+    z: 0,
+  });
   setupIntersectionPoints(topVertLines, topHoriLines);
   weeksLeft -= topRows;
   while (weeksLeft > 0) {
     const offset = {
-      x: random(500, 2000),
-      y: random(500, 2000),
-      z: random(500, 2000),
+      x: random(-1000, 1000),
+      y: random(-1000, 1000),
+      z: random(-3000, 3000),
     };
-    const rows = weeksLeft < 2 ? weeksLeft : random(2, weeksLeft);
-    const vertLines = setupVertLines();
-    const horiLines = setupHoriLines(vertLines, rows);
+    const rows = weeksLeft < 2 ? weeksLeft : random(2, 10);
+    const vertLines = setupVertLines(offset);
+    const horiLines = setupHoriLines(vertLines, rows, offset);
     setupIntersectionPoints(vertLines, horiLines);
     weeksLeft -= rows;
   }
-
-  // end set 1
-
-  // // set 2
-  // const vertLines2 = [];
-  // const bottomY2 = -2000;
-  // const lastRow = points.slice(points.length - 7, points.length);
-  // for (let i = 0; i < days.length; i++) {
-  //   const { bottomX, type } = days[i];
-  //   const topX = lastRow[i].x;
-  //   const topY = lastRow[i].y;
-  //   const z = lastRow[i].z;
-  //   const l = [topX, topY, bottomX, bottomY2];
-  //   const lm = (l[3] - l[1]) / (l[2] - l[0]);
-  //   const lb = l[1] - lm * l[0];
-  //   lines.push({ l, plane: "xy" });
-  //   vertLines2.push({ m: lm, b: lb, x: topX, z });
-  // }
-
-  // const horiLines2 = [];
-  // const phase2 = 25;
-  // // // horizontal lines
-  // for (let i = 0; i < phase2; i++) {
-  //   const lHorY = -200 - i * 50;
-  //   const l1 = vertLines2[0];
-  //   const l7 = vertLines2[vertLines2.length - 1];
-  // const l1Fin = isFinite(l1.m);
-  // const l7Fin = isFinite(l7.m);
-  //   const lHor = [
-  // l1Fin ? (lHorY - l1.b) / l1.m : l1.x,
-  // lHorY,
-  // l7Fin ? (lHorY - l7.b) / l7.m : l7.x,
-  // lHorY,
-  //   ];
-  //   horiLines2.push(lHorY);
-  //   lines.push({ l: lHor, plane: "xy" });
-  // }
-  // for (let j = 0; j < horiLines2.length; j++) {
-  //   for (let i = 0; i < vertLines2.length; i++) {
-  //     const { m, b, x } = vertLines2[i];
-  //     const y = horiLines2[j];
-  //     const xf = isNaN((y - b) / m) ? x : (y - b) / m;
-  //     points.push({ x: xf, y, z: 0 });
-  //   }
-  // }
 
   // POINTS START
   for (let i = 0; i < matchPoints.length - 1; i++) {
@@ -458,32 +461,32 @@ function setupLines() {
       pz2,
     ]);
   }
-  // for (let i = 0; i < tensionPoints.length - 2; i++) {
-  //   const px1 = random(-900, 1000);
-  //   const py1 = random(-900, 1000);
-  //   const pz1 = random(-900, 1000);
-  //   const px2 = random(-900, 1000);
-  //   const py2 = random(-900, 1000);
-  //   const pz2 = random(-900, 1000);
+  for (let i = 0; i < tensionPoints.length - 2; i++) {
+    const px1 = random(-900, 1000);
+    const py1 = random(-900, 1000);
+    const pz1 = random(-900, 1000);
+    const px2 = random(-900, 1000);
+    const py2 = random(-900, 1000);
+    const pz2 = random(-900, 1000);
 
-  //   const p3 = getCoordFromSet(tensionPoints[i]);
-  //   const p4 = getCoordFromSet(tensionPoints[i + 1]);
+    const p3 = getCoordFromSet(tensionPoints[i]);
+    const p4 = getCoordFromSet(tensionPoints[i + 1]);
 
-  //   curvePoints2.push([
-  //     px1,
-  //     py1,
-  //     pz1,
-  //     p3.x,
-  //     p3.y,
-  //     p3.z,
-  //     p4.x,
-  //     p4.y,
-  //     p4.z,
-  //     px2,
-  //     py2,
-  //     pz2,
-  //   ]);
-  // }
+    curvePoints2.push([
+      px1,
+      py1,
+      pz1,
+      p3.x,
+      p3.y,
+      p3.z,
+      p4.x,
+      p4.y,
+      p4.z,
+      px2,
+      py2,
+      pz2,
+    ]);
+  }
 }
 
 function getCoordFromSet(set) {
@@ -497,12 +500,10 @@ function drawGrid(parent) {
   const lineMaterial = new THREE.LineBasicMaterial({ color: 0x000000 });
   for (let i = 0; i < lines.length; i++) {
     const { l, plane } = lines[i];
-    const [x1, y1, x2, y2] = l;
+    const [x1, y1, z1, x2, y2, z2] = l;
     const points = [];
-    if (plane == "xy") {
-      points.push(new THREE.Vector3(x1, y1, z));
-      points.push(new THREE.Vector3(x2, y2, z));
-    }
+    points.push(new THREE.Vector3(x1, y1, z1));
+    points.push(new THREE.Vector3(x2, y2, z2));
 
     const geometry = new THREE.BufferGeometry().setFromPoints(points);
 
