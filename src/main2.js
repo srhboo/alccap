@@ -13,30 +13,21 @@ let camera, scene, raycaster, renderer, parentTransform, sphereInter;
 
 //data
 
-let lines = [],
-  curves = [],
-  straightLines = [];
-const lineObjects = [],
-  points = [],
-  curvePoints = [],
-  straightLinePoints = [],
-  chaosPoints = [];
-
-const matchPoints = [],
-  matchPoints2 = [],
-  tensionPoints = [],
-  drinkPoints = [],
-  spendPoints = [];
-
-const lineOffset = [],
-  segmentRows = [],
-  segmentObjects = [],
-  segmentPositions = [],
-  segmentOffsets = [],
-  accSegmentPositions = [0],
-  totalLineCount = [],
-  segmentPoints = [];
-
+let lines = [];
+const lineObjects = [];
+const points = [];
+const curvePoints = [];
+const curvePoints2 = [];
+let curves = [];
+let curves2 = [];
+const matchPoints = [];
+const matchPoints2 = [];
+const tensionPoints = [];
+const drinkPoints = [];
+const lineOffset = [];
+const segmentRows = [];
+const totalLineCount = [];
+const segmentPointsStart = [];
 const searchTerm = "tired";
 const searchTerm2 = "energy";
 
@@ -91,10 +82,9 @@ function init() {
   parentTransform = new THREE.Object3D();
 
   drawGrid(parentTransform, 0);
-  moveSegments();
 
   drawCurves(parentTransform);
-  // relaxCurves();
+  relaxCurves();
   scene.add(parentTransform);
 
   document.addEventListener("pointermove", onPointerMove);
@@ -151,8 +141,8 @@ function drawCurves(parent) {
     color: 0x000000,
     linewidth: 1,
   });
-  for (let i = 0; i < straightLinePoints.length; i++) {
-    const [p1, p2] = straightLinePoints[i];
+  for (let i = 0; i < curvePoints2.length; i++) {
+    const [c1x, c1y, c1z, p1, , , p2, , , c2x, c2y, c2z] = curvePoints2[i];
 
     // points are given as index of global points array
     const p1x = points[p1].x;
@@ -166,16 +156,17 @@ function drawCurves(parent) {
     newPoints.push(new THREE.Vector3(p1x, p1y, p1z));
     newPoints.push(new THREE.Vector3(p2x, p2y, p2z));
 
-    const geometry = new THREE.BufferGeometry().setFromPoints(newPoints);
+    const geometry = new THREE.BufferGeometry().setFromPoints(points);
 
     const line = new THREE.Line(geometry, curveMaterial2);
 
-    straightLines.push(line);
+    curves2.push(line);
     parent.add(line);
   }
 }
 
 function relaxCurves() {
+  const delta = clock.getDelta();
   const time = clock.getElapsedTime() * 10;
   for (let i = 0; i < curves.length; i++) {
     const curve = curves[i];
@@ -218,23 +209,6 @@ function relaxCurves() {
     position.needsUpdate = true;
     curve.geometry.computeBoundingBox();
   }
-  for (let i = 0; i < straightLines.length; i++) {
-    const line = straightLines[i];
-    const position = line.geometry.attributes.position;
-
-    const positionBase = straightLinePoints[i];
-    const [p1, p2] = positionBase;
-    // points are given as index of global points array
-    position.array[0] = points[p1].x;
-    position.array[1] = points[p1].y;
-    position.array[2] = points[p1].z;
-    position.array[3] = points[p2].x;
-    position.array[4] = points[p2].y;
-    position.array[5] = points[p2].z;
-
-    position.needsUpdate = true;
-    line.geometry.computeBoundingBox();
-  }
 }
 
 //
@@ -245,9 +219,10 @@ function animate() {
   render();
   stats.update();
 
-  untether();
-
-  relaxCurves();
+  if (theta < 20) {
+    untether();
+    relaxCurves();
+  }
 }
 
 function render() {
@@ -288,10 +263,6 @@ function setupData() {
     const hasDrink = entry[4];
     if (hasDrink) {
       drinkPoints.push(entry);
-    }
-    const spend = entry[5];
-    if (parseInt(spend) > 0) {
-      spendPoints.push(entry);
     }
   }
 }
@@ -364,24 +335,19 @@ function setupVertLines(offset) {
   const days = generateDays(offset);
 
   const lastRow = points.slice(points.length - 7, points.length);
-
-  segmentPositions.push(lastRow[0].y);
-  const prevAcc = accSegmentPositions.slice(-1)[0];
-  accSegmentPositions.push(prevAcc + lastRow[0].y);
-
   const vertLines = [];
   // ending position
   // const bottomY = offset.y - random(200, 1000);
-  const bottomY = 0 - random(200, 1000);
+  const bottomY = lastRow[0].y - random(200, 1000);
   for (let i = 0; i < days.length; i++) {
     // ending position
     // const { bottomX } = days[i];
-    const topX = lastRow[i].x + offset.x;
+    // const topX = lastRow[i].x + offset.x;
     // const topY = offset.y;
     // const topZ = offset.z;
-    // const topX = 0;
-    const topY = 0;
-    const topZ = 0;
+    const topX = lastRow[i].x;
+    const topY = lastRow[i].y;
+    const topZ = lastRow[i].z;
 
     const bottomX = topX + 10;
 
@@ -405,8 +371,8 @@ function setupHoriLines(vertLines, rows, offset) {
 
   if (points.length) {
     const lastRow = points.slice(points.length - 7, points.length);
-    currentY = 0;
-    currentZ = 0;
+    currentY = lastRow[0].y;
+    currentZ = lastRow[0].z;
     // ending position
     // currentY = offset.y;
     // currentZ = offset.z;
@@ -460,19 +426,43 @@ function updateTotalLineCount(newRows) {
   }
 }
 
-function setupIntersectionPoints(vertLines, horiLines, segIndex) {
-  // segmentPointsStart.push(points.length);
+function updateAllPoints() {
+  for (let i = 0; i < segmentRows.length; i++) {
+    const rows = segmentRows[i];
+    const startCoord = totalLineCount[i];
+    updateIntersectionPoints(
+      lines.slice(startCoord, startCoord + 7),
+      lines.slice(startCoord + 7, startCoord + 7 + rows),
+      i
+    );
+  }
+}
+
+function updateIntersectionPoints(vertLines, horiLines, segment) {
+  const start = segmentPointsStart[segment];
+  for (let j = 0; j < horiLines.length; j++) {
+    for (let i = 0; i < vertLines.length; i++) {
+      const { m, b, x, z } = vertLines[i].l;
+      const y = horiLines[j].l;
+      const xf = isNaN((y - b) / m) ? x : (y - b) / m;
+      points[start + i + j].x = xf;
+      points[start + i + j].y = y;
+      points[start + i + j].z = z;
+
+      // points.push({ x: xf, y, z });
+    }
+  }
+  console.log(points[50]);
+}
+
+function setupIntersectionPoints(vertLines, horiLines) {
+  segmentPointsStart.push(points.length);
   for (let j = 0; j < horiLines.length; j++) {
     for (let i = 0; i < vertLines.length; i++) {
       const { m, b, x, z } = vertLines[i];
       const y = horiLines[j];
       const xf = isNaN((y - b) / m) ? x : (y - b) / m;
-      const pt = { x: xf, y, z };
-      points.push(pt);
-      if (!segmentPoints[segIndex]) {
-        segmentPoints[segIndex] = [];
-      }
-      segmentPoints[segIndex].push(pt);
+      points.push({ x: xf, y, z });
     }
   }
 }
@@ -487,19 +477,18 @@ function setupLines() {
   const topVertLines = setupTopVertLines(topOffset);
   const topRows = random(2, 10);
   const topHoriLines = setupHoriLines(topVertLines, topRows, topOffset);
-  setupIntersectionPoints(topVertLines, topHoriLines, segmentPositions.length);
+  setupIntersectionPoints(topVertLines, topHoriLines);
   weeksLeft -= topRows;
   while (weeksLeft > 0) {
-    // const offset = {
-    //   x: random(-1000, 1000),
-    //   y: random(-1000, 1000),
-    //   z: random(-3000, 3000),
-    // };
-    const offset = { x: 0, y: 0, z: 0 };
+    const offset = {
+      x: random(-1000, 1000),
+      y: random(-1000, 1000),
+      z: random(-3000, 3000),
+    };
     const rows = weeksLeft < 2 ? weeksLeft : random(2, 10);
     const vertLines = setupVertLines(offset);
     const horiLines = setupHoriLines(vertLines, rows, offset);
-    setupIntersectionPoints(vertLines, horiLines, segmentPositions.length);
+    setupIntersectionPoints(vertLines, horiLines);
     weeksLeft -= rows;
   }
 
@@ -532,14 +521,6 @@ function setupLines() {
     curvePoints.push([px1, py1, pz1, p3, p3, p3, p4, p4, p4, px2, py2, pz2]);
   }
   for (let i = 0; i < tensionPoints.length - 2; i++) {
-    const p1 = getCoordFromSet(tensionPoints[i]);
-    const p2 = getCoordFromSet(tensionPoints[i + 1]);
-    // middle two points are indexes
-    straightLinePoints.push([p1, p2]);
-  }
-
-  // messy
-  for (let i = 0; i < spendPoints.length - 1; i++) {
     const px1 = random(-900, 1000);
     const py1 = random(-900, 1000);
     const pz1 = random(-900, 1000);
@@ -547,10 +528,10 @@ function setupLines() {
     const py2 = random(-900, 1000);
     const pz2 = random(-900, 1000);
 
-    const p3 = getCoordFromSet(spendPoints[i]);
-    const p4 = getCoordFromSet(spendPoints[i + 1]);
-
-    chaosPoints.push([px1, py1, pz1, p3, p3, p3, p4, p4, p4, px2, py2, pz2]);
+    const p3 = getCoordFromSet(tensionPoints[i]);
+    const p4 = getCoordFromSet(tensionPoints[i + 1]);
+    // middle two points are indexes
+    curvePoints2.push([px1, py1, pz1, p3, p3, p3, p4, p4, p4, px2, py2, pz2]);
   }
 }
 
@@ -562,79 +543,56 @@ function getCoordFromSet(set) {
 }
 
 function getNewTetherPos(offset) {
-  const time = clock.getElapsedTime();
+  const currOffset = (offset / 100) * theta;
   const isComplete = theta >= 1000;
-  const floating = noise.simplex3(time / 100, time / 100, time / 200) * 0.5;
-  return isComplete ? floating : offset / 1000;
+  return isComplete ? 0 : offset / 1000;
 }
 
 function untether() {
   theta += 1;
 
-  for (let i = 0; i < segmentObjects.length; i++) {
-    const seg = segmentObjects[i];
-    const currPos = seg.position;
-    const offset = segmentOffsets[i];
-    seg.position.setX(currPos.x + getNewTetherPos(offset.x));
-    seg.position.setY(currPos.y + getNewTetherPos(offset.y));
-    seg.position.setZ(currPos.z + getNewTetherPos(offset.z));
-    const segPts = segmentPoints[i] || [];
-    for (let j = 0; j < segPts.length; j++) {
-      segPts[j].x += getNewTetherPos(offset.x);
-      segPts[j].y += getNewTetherPos(offset.y);
-      segPts[j].z += getNewTetherPos(offset.z);
-    }
+  for (let i = 0; i < lines.length; i++) {
+    // points 01, 23, 45, 67
+    const offset = lineOffset[i];
+    const lineObject = lineObjects[i];
+    const position = lineObject.geometry.attributes.position;
+    const line = lines[i];
+
+    position.array[0] += getNewTetherPos(offset.x);
+    line[0] += getNewTetherPos(offset.x);
+    position.array[1] += getNewTetherPos(offset.y);
+    line[1] += getNewTetherPos(offset.y);
+    position.array[2] += getNewTetherPos(offset.z);
+    line[2] += getNewTetherPos(offset.z);
+
+    position.array[3] += getNewTetherPos(offset.x);
+    line[3] += getNewTetherPos(offset.x);
+    position.array[4] += getNewTetherPos(offset.y);
+    line[4] += getNewTetherPos(offset.y);
+    position.array[5] += getNewTetherPos(offset.z);
+    line[5] += getNewTetherPos(offset.z);
+
+    updateAllPoints();
+
+    position.needsUpdate = true;
   }
 }
 
-function moveSegments() {
-  for (let i = 0; i < segmentObjects.length; i++) {
-    const seg = segmentObjects[i];
-    seg.position.setY(accSegmentPositions[i]);
-    const segPts = segmentPoints[i];
-    for (let j = 0; j < segPts.length; j++) {
-      segPts[j].y += accSegmentPositions[i];
-    }
-  }
-}
 function drawGrid(parent) {
   let z = 0;
   const lineMaterial = new THREE.LineBasicMaterial({ color: 0x000000 });
 
-  const addLine = (lines, i, segParent) => {
+  for (let i = 0; i < lines.length; i++) {
     const { l } = lines[i];
     const [x1, y1, z1, x2, y2, z2] = l;
-    const tempPoints = [];
-    tempPoints.push(new THREE.Vector3(x1, y1, z1));
-    tempPoints.push(new THREE.Vector3(x2, y2, z2));
+    const points = [];
+    points.push(new THREE.Vector3(x1, y1, z1));
+    points.push(new THREE.Vector3(x2, y2, z2));
 
-    const geometry = new THREE.BufferGeometry().setFromPoints(tempPoints);
+    const geometry = new THREE.BufferGeometry().setFromPoints(points);
 
     const line = new THREE.Line(geometry, lineMaterial);
     lineObjects.push(line);
-    segParent.add(line);
-  };
-  for (let i = 0; i < segmentRows.length; i++) {
-    const segmentParent = new THREE.Object3D();
-    const offset = {
-      x: random(-1000, 1000),
-      y: random(-1000, 1000),
-      z: random(-3000, 3000),
-    };
-    segmentOffsets.push(offset);
-    const rows = segmentRows[i];
-    const startCoord = totalLineCount[i];
-
-    const vertLines = lines.slice(startCoord, startCoord + 7);
-    const horiLines = lines.slice(startCoord + 7, startCoord + 7 + rows);
-
-    for (let j = 0; j < vertLines.length; j++) {
-      addLine(vertLines, j, segmentParent);
-    }
-    for (let j = 0; j < horiLines.length; j++) {
-      addLine(horiLines, j, segmentParent);
-    }
-    segmentObjects.push(segmentParent);
-    parent.add(segmentParent);
+    parent.add(line);
   }
 }
