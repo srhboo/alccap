@@ -79,7 +79,10 @@ function init() {
   container.appendChild(renderer.domElement);
 
   controls = new OrbitControls(camera, renderer.domElement);
-  camera.position.set(0, 300, 3000);
+  camera.position.set(-2000, -1000, 1000);
+  controls.target.y = -1400;
+
+  camera.position.y = controls.target.y + 1600;
   controls.update();
 
   stats = new Stats();
@@ -603,6 +606,8 @@ function getNewTetherPos(offset) {
   return isComplete ? floating : offset / 1000;
 }
 
+function addText(text, position) {}
+
 function untether() {
   theta += 1;
 
@@ -697,7 +702,7 @@ function drawGrid(parent) {
 
       const curveObject = new THREE.Line(curveGeometry3, curveMaterial2);
       curveObject.callback = () => {
-        console.log(chaosPointLabels[i][j]);
+        addText("blah", curveObject.position);
       };
       catCurves.push(curveObject);
       segmentParent.add(curveObject);
