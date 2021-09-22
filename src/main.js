@@ -15,12 +15,14 @@ let camera, scene, raycaster, renderer, parentTransform, sphereInter;
 
 let lines = [],
   curves = [],
+  catCurves = [],
   straightLines = [];
 const lineObjects = [],
   points = [],
   curvePoints = [],
   straightLinePoints = [],
-  chaosPoints = [];
+  chaosPoints = [],
+  chaosPointLabels = [];
 
 const matchPoints = [],
   matchPoints2 = [],
@@ -30,6 +32,7 @@ const matchPoints = [],
 
 const lineOffset = [],
   segmentRows = [],
+  accSegmentRows = [],
   segmentObjects = [],
   segmentPositions = [],
   segmentOffsets = [],
@@ -37,8 +40,8 @@ const lineOffset = [],
   totalLineCount = [],
   segmentPoints = [];
 
-const searchTerm = "tired";
-const searchTerm2 = "energy";
+const searchTerm = "productive";
+const searchTerm2 = "sad";
 
 let theta = 0;
 let weeks = 0;
@@ -60,7 +63,7 @@ function init() {
   camera = new THREE.PerspectiveCamera(
     70,
     window.innerWidth / window.innerHeight,
-    1,
+    0.001,
     100000
   );
 
@@ -98,7 +101,7 @@ function init() {
   scene.add(parentTransform);
 
   document.addEventListener("pointermove", onPointerMove);
-
+  document.addEventListener("click", onPointerClick);
   //
 
   window.addEventListener("resize", onWindowResize);
@@ -114,6 +117,16 @@ function onWindowResize() {
 function onPointerMove(event) {
   pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
   pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
+}
+
+function onPointerClick(event) {
+  const intersects = raycaster.intersectObjects(parentTransform.children, true);
+  if (intersects.length) {
+    const currEl = intersects[0].object;
+    if (currEl.callback) {
+      currEl.callback();
+    }
+  }
 }
 
 function drawCurves(parent) {
@@ -169,6 +182,9 @@ function drawCurves(parent) {
     const geometry = new THREE.BufferGeometry().setFromPoints(newPoints);
 
     const line = new THREE.Line(geometry, curveMaterial2);
+    line.callback = () => {
+      console.log("hello");
+    };
 
     straightLines.push(line);
     parent.add(line);
@@ -257,11 +273,16 @@ function render() {
 
   const intersects = raycaster.intersectObjects(parentTransform.children, true);
 
+  // if (intersects.length > 0) {
+  //   sphereInter.visible = true;
+  //   sphereInter.position.copy(intersects[0].point);
+  // } else {
+  //   sphereInter.visible = false;
+  // }
   if (intersects.length > 0) {
-    sphereInter.visible = true;
-    sphereInter.position.copy(intersects[0].point);
+    document.body.style.cursor = "pointer";
   } else {
-    sphereInter.visible = false;
+    document.body.style.cursor = "default";
   }
 
   renderer.render(scene, camera);
@@ -289,7 +310,7 @@ function setupData() {
     if (hasDrink) {
       drinkPoints.push(entry);
     }
-    const spend = entry[5];
+    const spend = entry[6];
     if (parseInt(spend) > 0) {
       spendPoints.push(entry);
     }
@@ -446,6 +467,8 @@ function setupHoriLines(vertLines, rows, offset) {
     lineOffset.push(offset);
   }
   segmentRows.push(horiLines.length);
+  const tempBase = accSegmentRows.length ? accSegmentRows.slice(-1)[0] : 0;
+  accSegmentRows.push(tempBase + horiLines.length);
   updateTotalLineCount(horiLines.length);
   return horiLines;
 }
@@ -539,25 +562,37 @@ function setupLines() {
   }
 
   // messy
+
+  let segmentIndex = 0;
+  chaosPoints[segmentIndex] = [];
+  chaosPointLabels[segmentIndex] = [];
   for (let i = 0; i < spendPoints.length - 1; i++) {
-    const px1 = random(-900, 1000);
-    const py1 = random(-900, 1000);
-    const pz1 = random(-900, 1000);
-    const px2 = random(-900, 1000);
-    const py2 = random(-900, 1000);
-    const pz2 = random(-900, 1000);
-
-    const p3 = getCoordFromSet(spendPoints[i]);
-    const p4 = getCoordFromSet(spendPoints[i + 1]);
-
-    chaosPoints.push([px1, py1, pz1, p3, p3, p3, p4, p4, p4, px2, py2, pz2]);
+    const spend = parseFloat(spendPoints[i][6]);
+    const pi = getCoordFromSet(spendPoints[i]);
+    const segmentLimit = accSegmentRows[segmentIndex];
+    const week = parseInt(spendPoints[i][0]);
+    if (week > segmentLimit) {
+      segmentIndex += 1;
+    }
+    const randomPoints = [];
+    for (let j = 0; j < spend; j++) {
+      const dx = random(-20, 20);
+      const dy = random(-20, 20);
+      const dz = random(-20, 20);
+      randomPoints.push(new THREE.Vector3(dx, dy, dz));
+    }
+    if (!chaosPoints[segmentIndex]) {
+      chaosPoints[segmentIndex] = [];
+      chaosPointLabels[segmentIndex] = [];
+    }
+    chaosPoints[segmentIndex].push([pi, ...randomPoints]);
+    chaosPointLabels[segmentIndex].push(spend);
   }
 }
 
 function getCoordFromSet(set) {
   const week = parseInt(set[0]);
   const dayOfWeek = parseInt(set[1]);
-  // return points[(week - 1) * 7 + dayOfWeek - 1];
   return (week - 1) * 7 + dayOfWeek - 1;
 }
 
@@ -634,6 +669,40 @@ function drawGrid(parent) {
     for (let j = 0; j < horiLines.length; j++) {
       addLine(horiLines, j, segmentParent);
     }
+    const curveMaterial2 = new THREE.LineBasicMaterial({
+      color: 0x000000,
+      linewidth: 1,
+    });
+    const segmentChaosPoints = chaosPoints[i];
+    for (let j = 0; j < segmentChaosPoints.length; j++) {
+      const [pi, ...other] = segmentChaosPoints[j];
+      // points are given as index of global points array
+      const pix = points[pi].x;
+      const piy = points[pi].y;
+      const piz = points[pi].z;
+
+      const adjustedOther = other.map(({ x, y, z }) => {
+        return new THREE.Vector3(x + pix, y + piy, z + piz);
+      });
+
+      const curve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(pix, piy, piz),
+        ...adjustedOther,
+      ]);
+      const newPoints = curve.getPoints(40);
+
+      const curveGeometry3 = new THREE.BufferGeometry().setFromPoints(
+        newPoints
+      );
+
+      const curveObject = new THREE.Line(curveGeometry3, curveMaterial2);
+      curveObject.callback = () => {
+        console.log(chaosPointLabels[i][j]);
+      };
+      catCurves.push(curveObject);
+      segmentParent.add(curveObject);
+    }
+
     segmentObjects.push(segmentParent);
     parent.add(segmentParent);
   }
