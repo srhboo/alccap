@@ -7,3 +7,26 @@ body {
   width: 0px;
   background: transparent; /* make scrollbar transparent */
 }
+
+.reset-button {
+  position: absolute;
+  border: none;
+  right: 1.5rem;
+  top: 1rem;
+  cursor: pointer;
+  background-color: transparent;
+}
+.reset-button img {
+  height: 4rem;
+  width: 4rem;
+}
+#words {
+  position: absolute;
+  font-size: 2rem;
+  top: 1rem;
+  left: 1rem;
+  color: black;
+  width: 20rem;
+  height: 20rem;
+  overflow-wrap: break-word;
+}

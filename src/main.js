@@ -7,9 +7,17 @@ import { CSVToArray } from "./utils/csv";
 import { random } from "./utils/misc";
 import { OrbitControls } from "./jsm/controls/OrbitControls";
 import { noise } from "./utils/perlin";
+import { CSS2DObject, CSS2DRenderer } from "./jsm/renderers/CSS2DRenderer";
+import "./styles.css";
 
-let container, stats, controls, clock;
-let camera, scene, raycaster, renderer, parentTransform, sphereInter;
+let container, controls, clock;
+let camera,
+  scene,
+  raycaster,
+  renderer,
+  parentTransform,
+  sphereInter,
+  labelRenderer;
 
 //data
 
@@ -28,7 +36,8 @@ const matchPoints = [],
   matchPoints2 = [],
   tensionPoints = [],
   drinkPoints = [],
-  spendPoints = [];
+  spendPoints = [],
+  firstWeekPoints = [];
 
 const lineOffset = [],
   segmentRows = [],
@@ -56,6 +65,8 @@ function init() {
   clock = new THREE.Clock();
   container = document.createElement("div");
   document.body.appendChild(container);
+
+  labelRenderer = initializeCSSRenderer();
 
   setupData();
   setupLines();
@@ -85,8 +96,8 @@ function init() {
   camera.position.y = controls.target.y + 1600;
   controls.update();
 
-  stats = new Stats();
-  container.appendChild(stats.dom);
+  // stats = new Stats();
+  // container.appendChild(stats.dom);
 
   const geometry = new THREE.SphereGeometry(5);
   const material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
@@ -108,6 +119,20 @@ function init() {
   //
 
   window.addEventListener("resize", onWindowResize);
+  const resetButton = document.getElementById("reset-button");
+  resetButton.addEventListener("click", function () {
+    window.location.reload();
+  });
+}
+
+function initializeCSSRenderer() {
+  const labelRenderer = new CSS2DRenderer();
+  labelRenderer.setSize(window.innerWidth, window.innerHeight);
+  labelRenderer.domElement.style.position = "absolute";
+  labelRenderer.domElement.style.top = "0px";
+  labelRenderer.domElement.style.pointerEvents = "none";
+  document.getElementById("app").appendChild(labelRenderer.domElement);
+  return labelRenderer;
 }
 
 function onWindowResize() {
@@ -262,7 +287,7 @@ function animate() {
   requestAnimationFrame(animate);
 
   render();
-  stats.update();
+  // stats.update();
 
   untether();
 
@@ -271,17 +296,11 @@ function animate() {
 
 function render() {
   // find intersections
-
+  labelRenderer.render(scene, camera);
   raycaster.setFromCamera(pointer, camera);
 
   const intersects = raycaster.intersectObjects(parentTransform.children, true);
 
-  // if (intersects.length > 0) {
-  //   sphereInter.visible = true;
-  //   sphereInter.position.copy(intersects[0].point);
-  // } else {
-  //   sphereInter.visible = false;
-  // }
   if (intersects.length > 0) {
     document.body.style.cursor = "pointer";
   } else {
@@ -316,6 +335,9 @@ function setupData() {
     const spend = entry[6];
     if (parseInt(spend) > 0) {
       spendPoints.push(entry);
+    }
+    if (i < 7) {
+      firstWeekPoints.push(entry);
     }
   }
 }
@@ -606,7 +628,10 @@ function getNewTetherPos(offset) {
   return isComplete ? floating : offset / 1000;
 }
 
-function addText(text, position) {}
+function updateText(text) {
+  const words = document.getElementById("words");
+  words.innerText += text;
+}
 
 function untether() {
   theta += 1;
@@ -679,8 +704,10 @@ function drawGrid(parent) {
       linewidth: 1,
     });
     const segmentChaosPoints = chaosPoints[i];
+    const segmentChaosPointLabels = chaosPointLabels[i];
     for (let j = 0; j < segmentChaosPoints.length; j++) {
       const [pi, ...other] = segmentChaosPoints[j];
+      const spend = segmentChaosPointLabels[j];
       // points are given as index of global points array
       const pix = points[pi].x;
       const piy = points[pi].y;
@@ -702,10 +729,28 @@ function drawGrid(parent) {
 
       const curveObject = new THREE.Line(curveGeometry3, curveMaterial2);
       curveObject.callback = () => {
-        addText("blah", curveObject.position);
+        updateText(`${spend}`);
       };
       catCurves.push(curveObject);
       segmentParent.add(curveObject);
+    }
+    if (i === 1) {
+      const daysOfWeek = ["M", "S", "T", "W", "T", "F", "S"];
+      for (let j = 0; j < firstWeekPoints.length; j++) {
+        const text = document.createElement("div");
+        text.className = "text-label";
+        text.style.color = "black";
+        text.style.backgroundColor = "transparent";
+        text.textContent = daysOfWeek[j];
+
+        const label = new CSS2DObject(text);
+        const ptPosition = segmentPoints[1][j];
+        label.position.x = ptPosition.x;
+        label.position.y = ptPosition.y;
+        label.position.z = ptPosition.z;
+        // label.position.y -= 200;
+        segmentParent.add(label);
+      }
     }
 
     segmentObjects.push(segmentParent);
